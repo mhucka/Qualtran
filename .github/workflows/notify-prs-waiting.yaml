@@ -1,0 +1,66 @@
+# Copyright 2025 The Cirq Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Workflow that triggers when a PR is waiting for workflow run approval and
+# sends email to our internal notification address. This workflow is needed
+# because as of mid-2025, GitHub does not provide a way to get notified that
+# there are PRs waiting to have CI check workflows approved.
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+name: Notify workflows need approval
+run-name: >-
+  Notify maintainers that CI checks for PR
+  ${{github.event.workflow_run.pull_requests[0].number}}
+  are waiting for approval
+
+on:
+  workflow_run:
+    workflows: ["Pull Request CI"]
+    types:
+      - requested
+
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR to notify about
+        required: true
+
+jobs:
+  send-email:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      pr-num: ${{inputs.pr||github.event.workflow_run.pull_requests[0].number}}
+      pr-url: ${{github.event.workflow_run.pull_requests[0].url}}
+      repo-url: https://github.com/${{github.repository}}
+    steps:
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: ${{secrets.SMTP_SERVER}}
+          server_port: ${{secrets.SMTP_PORT}}
+          secure: true
+          username: ${{secrets.SMTP_USERNAME}}
+          password: ${{secrets.SMTP_PASSWORD}}
+          from: "GitHub Actions <${{secrets.SMTP_USERNAME}}>"
+          to: ${{secrets.QUANTUMLIB_NOTIFICATIONS_ADDRESS}}
+          subject: "Workflow approval needed in ${{github.repository}}"
+          content_type: text/plain
+          body: |
+            PR ${{env.pr-num}} in ${{github.repository}} has a workflow
+            waiting for approval. Please review & approve the workflow at
+            ${{env.repo-url}}/actions/runs/${{github.event.workflow_run.id}}
+
+            URL for the PR: ${{env.pr-url}}
